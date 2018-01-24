@@ -3,7 +3,7 @@
 import UIKit
 import Firebase
 
-class AboutViewController: UIViewController {
+class AboutViewController: UIViewController, VerifyUserDelegate {
     
     @IBOutlet weak var userLabel: UILabel!
     @IBOutlet weak var treeDescTextView: UITextView!
@@ -20,8 +20,13 @@ class AboutViewController: UIViewController {
             guard let tree = tree else { return }
             treeDescTextView.text = tree.treeDescription
             coordinateLabel.text = "\(tree.treeLatitude), \(tree.treeLongitude)"
+
+            if tree.treeDescription == "" {
+                self.treeDescTextView.text = "\(tree.treeCreatorName) did not love me enough. So... no description..."
+                self.treeDescTextView.textColor = UIColor.gray
+            }
             
-            getCreatorName()
+            self.userLabel.text = tree.treeCreatorName
             
             for thisTree in AppData.sharedInstance.favouritesArr {
                 if tree.treeID == thisTree.treeID {
@@ -42,7 +47,6 @@ class AboutViewController: UIViewController {
         
         treeDescTextView.isEditable = false
         addFavouriteButton.layer.cornerRadius = addFavouriteButton.frame.height/8
-
         
     }
 
@@ -57,31 +61,22 @@ class AboutViewController: UIViewController {
        treeDescTextView.setContentOffset(CGPoint(x: 0, y: 0), animated: false)
     }
     
-    func getCreatorName() {
-        
-        let creator = tree?.treeCreator
-        AppData.sharedInstance.usersNode
-            .child(creator!)
-            .observe( .value, with: { (snapshot) in
-                
-                let value = snapshot.value as? NSDictionary
-                
-                if (value == nil) {
-                    return
-                }
-                
-                let userName = value?["nameKey"] as? String ?? ""
-                self.userLabel.text = "\(userName)"
-                
-                if self.tree?.treeDescription == "" {
-                    self.treeDescTextView.text = "\(userName) did not love me enough. So... no description..."
-                    self.treeDescTextView.textColor = UIColor.gray
-                }
-
-            })
+    //MARK: Prepare For Segue
+    
+    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
+        let signUpVC = segue.destination as! SignUpViewController
+        signUpVC.delegate = self
+        signUpVC.sourceVC = self
+    }
+    
+    //MARK: VerifyUserDelegate
+    
+    func verificationComplete() {
+        addToFavourites(tree!)
     }
     
     // MARK: - Actions
+    
     
     @IBAction func favouriteAction(_ sender: UIButton) {
         guard let tree = tree else {
@@ -89,6 +84,23 @@ class AboutViewController: UIViewController {
             return
         }
         
+        if ( Auth.auth().currentUser == nil ) {
+            AlertShow.confirm(inpView: self, titleStr: "Account Required", messageStr: "You need an account to add a tree to favourites. Would you like to sign in?", completion: {
+                self.performSegue(withIdentifier: "aboutToSignUp", sender: self)
+            })
+        } else {
+            
+            addToFavourites(tree)
+        }
+    }
+    
+    @IBAction func editTreeButton(_ sender: Any) {
+        
+    }
+    
+    //MARK: Custom Functions
+    
+    fileprivate func addToFavourites(_ tree: Tree) {
         if favouriteState == false {
             
             FavouritesManager.saveFavourite(tree: tree) { success in
@@ -119,10 +131,6 @@ class AboutViewController: UIViewController {
         }
         UserTreesManager.loadUserTrees { trees in
         }
-    }
-    
-    @IBAction func editTreeButton(_ sender: Any) {
-        
     }
     
     

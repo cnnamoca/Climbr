@@ -16,16 +16,12 @@ class LoginClass: NSObject {
                                                            email: user!.email!,
                                                            uid: user!.uid)
                 
-                
-                
                 print("LOGGED IN!")
                 completion()
-                
-//                ReadAll.readData(inpView: inpView);
             }
             else
             {
-                AlertShow.show(inpView: inpView, titleStr: "Failed", messageStr: error.debugDescription);
+                AlertShow.show(inpView: inpView, titleStr: "Failed", messageStr: "Your email or password was entered incorrectly.");
             }
         }
     }

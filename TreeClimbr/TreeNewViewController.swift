@@ -3,7 +3,7 @@ import CoreLocation
 import ImagePicker
 import Firebase
 
-class TreeNewViewController: UIViewController, UICollectionViewDelegate, UICollectionViewDataSource, UINavigationControllerDelegate, UITextFieldDelegate, UITextViewDelegate, ImagePickerDelegate {
+class TreeNewViewController: UIViewController, UICollectionViewDelegate, UICollectionViewDataSource, UINavigationControllerDelegate,UICollectionViewDelegateFlowLayout, UITextFieldDelegate, UITextViewDelegate, ImagePickerDelegate {
 
     //MARK: Outlets
     
@@ -25,13 +25,17 @@ class TreeNewViewController: UIViewController, UICollectionViewDelegate, UIColle
     
     var imageIsSet: Bool = false
     var titleIsSet: Bool = false
+    var showAlert = true
 
     
     //MARK: ViewController lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
         
+        showAlert = true
+        
         addPhotoButton.layer.cornerRadius = addPhotoButton.frame.height/4
+        photoCollectionView.delegate = self
 
         
         setupTextView()
@@ -40,28 +44,45 @@ class TreeNewViewController: UIViewController, UICollectionViewDelegate, UIColle
         canSaveTree()
         
         
+        
         let tap: UITapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(UIInputViewController.dismissKeyboard))
         view.addGestureRecognizer(tap)
         
-       
+        
     }
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(true)
+        
+        
         canSaveTree()
         
         if imageArr.count > 0 {
             treeImageView.image = imageArr[0]
             addPhotoButton.setTitle("Manage Photos", for: .normal)
-            saveButton.isEnabled = true
+//            saveButton.isEnabled = true
         } else {
             addPhotoButton.setTitle("Add Photos", for: .normal)
             saveButton.isEnabled = false
         }
 
         photoCollectionView.reloadData()
+        
+
+        
     }
     
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(true)
+        
+        if ( Auth.auth().currentUser == nil && self.showAlert == true ) {
+            AlertShow.confirm(inpView: self, titleStr: "Account Required", messageStr: "Would you like to sign in?", completion: {
+                self.showAlert = false
+                self.performSegue(withIdentifier: "toSignUp", sender: self)
+            })
+        }
+    }
+
     @objc func dismissKeyboard() {
         //Causes the view (or one of its embedded text fields) to resign the first responder status.
         view.endEditing(true)
@@ -74,13 +95,24 @@ class TreeNewViewController: UIViewController, UICollectionViewDelegate, UIColle
     
     @IBAction func save(_ sender: UIBarButtonItem) {
 
+        self.saveButton.isEnabled = false
+        let charset = CharacterSet(charactersIn: "$.[]#")
+        
+        if treeNameTextField.text!.rangeOfCharacter(from: charset) != nil {
+            treeNameTextField.text! = ""
+            AlertShow.show(inpView: self, titleStr: "Oops!", messageStr: "A tree's name cannot contain the following characters: \n & . [ ] # ")
+        } else {
         
         let photoData = treeImageView.image?.jpeg(.low)
         
         let lat = coordinate.latitude
         let long = coordinate.longitude
         
+            guard let curUser = Auth.auth().currentUser else {return}
+        
         let tree = Tree(name: treeNameTextField.text!, description: TreeDescTextView.text, treeLat: lat, treeLong: long, photo: photoData! as NSData)
+            tree.treeCreator = curUser.uid
+            tree.treeCreatorName = curUser.displayName!
         
         SaveTree.saveTree(tree: tree, completion: { success in
              self.dismiss(animated: true, completion: nil)
@@ -90,20 +122,17 @@ class TreeNewViewController: UIViewController, UICollectionViewDelegate, UIColle
                 PhotoManager.savePhotos(photos: photos, tree: tree) { success in
                     print("winners")
                     
+                    self.dismiss(animated: true) {
+                        self.sourceVC.reloadInputViews()
+                    }
                 }
             }
-            
         })
-        
-        
-
-
-        if TreeDescTextView.textColor == UIColor.lightGray {
-            TreeDescTextView.text = nil
+            
+            if TreeDescTextView.textColor == UIColor.lightGray {
+                TreeDescTextView.text = nil
+            }
         }
-        
-        dismiss(animated: true, completion: nil)
-
     }
     
     @IBAction func cancelAction(_ sender: UIBarButtonItem) {
@@ -125,7 +154,7 @@ class TreeNewViewController: UIViewController, UICollectionViewDelegate, UIColle
         imagePicker.dismiss(animated: true, completion: nil)
     }
     
-    //MARK: Collection
+    //MARK: Collection View
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
         return imageArr.count
     }
@@ -139,6 +168,15 @@ class TreeNewViewController: UIViewController, UICollectionViewDelegate, UIColle
         return cell
     }
     
+    func collectionView(_ collectionView: UICollectionView,
+                        layout collectionViewLayout: UICollectionViewLayout,
+                        sizeForItemAt indexPath: IndexPath) -> CGSize {
+        
+        let cellSize = CGSize(width: collectionView.frame.size.height , height: collectionView.frame.size.height )
+        
+        return cellSize
+    }
+    
     
     func setup() {
         photoCollectionView.delegate = self
@@ -147,6 +185,16 @@ class TreeNewViewController: UIViewController, UICollectionViewDelegate, UIColle
         TreeDescTextView.delegate = self
         treeNameTextField.delegate = self
         }
+    
+    //MARK: Prepare for segue
+    
+    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
+        
+        let signUpVC = segue.destination as! SignUpViewController
+        signUpVC.sourceVC = self
+        signUpVC.fromTreeNew = true
+        
+    }
     
     //MARK: Tap gestures
     func setupTap() {
@@ -200,6 +248,7 @@ class TreeNewViewController: UIViewController, UICollectionViewDelegate, UIColle
     }
     
     @IBAction func textFieldChanged(_ sender: UITextField) {
+
         if treeNameTextField.text!.isEmpty {
             titleIsSet = false
         } else {
@@ -216,6 +265,10 @@ class TreeNewViewController: UIViewController, UICollectionViewDelegate, UIColle
         
         return updatedText.count <= 40
     }
+
+    //MARK: Custom Functions
+    
+
 
     
     private func canSaveTree() {

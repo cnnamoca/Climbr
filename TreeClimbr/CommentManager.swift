@@ -13,20 +13,20 @@ class CommentManager: NSObject {
             return
         }
         
+        guard let curUser = Auth.auth().currentUser else {return}
         
-        
-        
-//        let userID = Auth.auth().currentUser?.uid
+        comment.commentID = "\(curUser.uid)" + "\(comment.timeStamp)"
         
         let commentDict: [String : Any] = [
-            "userIDKey": comment.userID,
+            "userIDKey": curUser.uid,
+            "usernameKey": curUser.displayName!,
             "bodyKey": comment.body,
             "timeKey": comment.timeStamp,
-            "commentIDKey": comment.commentID
+            "commentIDKey": comment.commentID,
         ]
         
         AppData.sharedInstance.commentsNode
-            .child(tree.treeID!)
+            .child(tree.treeID)
             .child(comment.commentID)
             .setValue(commentDict)
         
@@ -36,13 +36,13 @@ class CommentManager: NSObject {
     
     class func loadComments(tree: Tree, completion: @escaping ([Comment]?) -> Void) {
         
-        if ( Auth.auth().currentUser == nil ) {
-            completion(nil)
-            return
-        }
+//        if ( Auth.auth().currentUser == nil ) {
+//            completion(nil)
+//            return
+//        }
         
         AppData.sharedInstance
-            .commentsNode.child(tree.treeID!)
+            .commentsNode.child(tree.treeID)
             .observe (.value, with: { (snapshot) in
                 
                 let value = snapshot.value as? NSDictionary;
@@ -63,12 +63,14 @@ class CommentManager: NSObject {
                     let body = comment["bodyKey"] as! String
                     let timeStamp = comment["timeKey"] as! String
                     let commentID = comment["commentIDKey"] as! String
+                    let username = comment["usernameKey"] as! String
                     
                     
                     let readComment = Comment(body: body)
                     readComment.commentID = commentID
                     readComment.userID = userID
                     readComment.timeStamp = timeStamp
+                    readComment.username = username
 
                     
                     AppData.sharedInstance.commentArr.append(readComment)
@@ -83,7 +85,7 @@ class CommentManager: NSObject {
     
     class func deleteComment(tree: Tree, comment: Comment) {
         AppData.sharedInstance.commentsNode
-            .child(tree.treeID!)
+            .child(tree.treeID)
             .child(comment.commentID)
             .removeValue()
     }

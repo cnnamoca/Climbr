@@ -5,10 +5,10 @@ class ReadTrees: NSObject {
     
     
     class func read(completion: @escaping ([Tree]?) -> Void) {
-        if ( Auth.auth().currentUser == nil ) {
-            completion(nil)
-            return
-        }
+//        if ( Auth.auth().currentUser == nil ) {
+//            completion(nil)
+//            return
+//        }
         
         
         
@@ -42,6 +42,7 @@ class ReadTrees: NSObject {
                     let treeSpecies : String = tree["speciesKey"] as! String
                     let treePhotoStr = tree["photoKey"] as! String
                     let treeCreator = tree["creatorKey"] as! String
+                    let treeCreatorName = tree["creatorNameKey"] as! String
 //                    let treeComments = tree["commentsKey"] as! Array
                     
                     let treePhotoURL = URL(string: treePhotoStr)
@@ -62,10 +63,9 @@ class ReadTrees: NSObject {
                     readTree.treePhotoURL = treePhotoURL!
                     readTree.treeID = treeID
                     readTree.treeCreator = treeCreator
+                    readTree.treeCreatorName = treeCreatorName
                     
                     AppData.sharedInstance.treesArr.append(readTree)
-                    
-//                    print (AppData.sharedInstance.treesArr)
                     
                 }
                 

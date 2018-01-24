@@ -3,13 +3,14 @@ import CoreLocation
 import Firebase
 import SDWebImage
 import MapKit
+import MessageUI
 
 
 protocol MapFocusDelegate {
     func focusOnTree(location: CLLocationCoordinate2D, tree: Tree)
 }
 
-class TreeDetailViewController: UIViewController {
+class TreeDetailViewController: UIViewController, MFMailComposeViewControllerDelegate {
     
     //MARK: Properties
     
@@ -22,6 +23,7 @@ class TreeDetailViewController: UIViewController {
     var photoObjArr = Array<Photo>()
     var imageArr = Array<UIImage>()
     @IBOutlet weak var navigationBar: UINavigationBar!
+    @IBOutlet weak var menuButton: UIBarButtonItem!
     
     //MARK: Outlets
     @IBOutlet var toMapButton: UIBarButtonItem!
@@ -32,6 +34,7 @@ class TreeDetailViewController: UIViewController {
     @IBOutlet weak var picturesView: UIView!
     @IBOutlet weak var leftBarButtonItem: UIBarButtonItem!
     @IBOutlet weak var rightBarButtonItem: UIBarButtonItem!
+    @IBOutlet weak var segmentedControl: UISegmentedControl!
     
     lazy var aboutViewController: AboutViewController = {
         return childViewControllers.first(where: { (viewController) -> Bool in
@@ -39,10 +42,10 @@ class TreeDetailViewController: UIViewController {
         }) as! AboutViewController
     }()
     
-    lazy var reviewViewController: ReviewViewController = {
+    lazy var reviewViewController: CommentViewController = {
         return childViewControllers.first(where: { (viewController) -> Bool in
-            return viewController is ReviewViewController
-        }) as! ReviewViewController
+            return viewController is CommentViewController
+        }) as! CommentViewController
     }()
     
     lazy var photosViewController: PhotosViewController = {
@@ -51,7 +54,7 @@ class TreeDetailViewController: UIViewController {
         }) as! PhotosViewController
     }()
     
-    @IBOutlet weak var segmentedControl: UISegmentedControl!
+
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -114,7 +117,6 @@ class TreeDetailViewController: UIViewController {
                             
                             photo.image = realImage!
                             self.photoObjArr.append(photo)
-//                            self.imageArr.append(realImage!)
                             group.leave()
                         }
                     })
@@ -125,7 +127,7 @@ class TreeDetailViewController: UIViewController {
                     DispatchQueue.main.async {
                         self.photosViewController.imageArr = []
                         self.photosViewController.photoObjArr = self.photoObjArr
-                        self.photosViewController.photoObjArr.sort(by: { $0.timeStamp < $1.timeStamp })
+                        self.photosViewController.photoObjArr.sort(by: { $0.timeStamp > $1.timeStamp })
                         for photo in self.photoObjArr {
                             self.imageArr.append(photo.image)
                         }
@@ -157,7 +159,7 @@ class TreeDetailViewController: UIViewController {
         
     }
     
-    
+    //MARK: Actions
     
     @IBAction func toMapAction(_ sender: UIBarButtonItem) {
         let treeLocation: CLLocationCoordinate2D = CLLocationCoordinate2DMake(tree.treeLatitude, tree.treeLongitude)
@@ -176,6 +178,63 @@ class TreeDetailViewController: UIViewController {
     }
     
     
+    @IBAction func menuButtonPressed(_ sender: UIBarButtonItem) {
+        
+        let alertController = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+        
+        let cancelAction = UIAlertAction(title: "Cancel", style: .cancel, handler: nil)
+        let reportAction = UIAlertAction(title: "Report", style: .default) { (report) in
+            let mailComposeViewController = self.configuredMailComposeViewController()
+            if MFMailComposeViewController.canSendMail() {
+                self.present(mailComposeViewController, animated: true, completion: nil)
+            } else {
+                self.showSendMailErrorAlert()
+            }
+            
+        }
+        
+        let deleteAction = UIAlertAction(title: "Delete", style: .destructive) { (delete) in
+            AlertShow.confirm(inpView: self, titleStr: "Delete Tree?", messageStr: " ", completion: {
+
+                UserTreesManager.deleteUserTree(tree: self.tree, completion: { (true) in
+                    FavouritesManager.loadFavourites(completion: { trees in
+                    })
+                    UserTreesManager.loadUserTrees(completion: { trees in
+                        self.dismiss(animated: true, completion: {
+                            self.sourceVC?.tableView.reloadData()
+                        })
+                    })
+                })
+            })
+        }
+        
+        let blockAction = UIAlertAction(title: "Block", style: .default) { (block) in
+            
+        
+            let badUser =  User(name: self.tree.treeCreatorName, email: "", uid: self.tree.treeCreator)
+            AlertShow.confirm(inpView: self, titleStr: "Block \(self.tree.treeCreatorName)?", messageStr: "You won't see \(self.tree.treeCreatorName)'s trees, photos and comments anymore.", completion: {
+                AppData.sharedInstance.hiddenUsersArr.append(badUser)
+                HiddenUsersManager.addToHiddenUsersList(badUser: badUser, completion: {_ in
+                })
+                self.dismiss(animated: true, completion: {
+                    self.sourceVC?.tableView.reloadData()
+                })
+            }
+            )}
+        
+        alertController.addAction(cancelAction)
+        
+        if tree.treeCreator == Auth.auth().currentUser?.uid {
+            alertController.addAction(deleteAction)
+        } else {
+            alertController.addAction(reportAction)
+            if Auth.auth().currentUser != nil {
+                alertController.addAction(blockAction)
+            }
+        }
+        
+        self.present(alertController, animated: true, completion: nil)
+    }
     
     
     //MARK: Segment Control
@@ -223,5 +282,28 @@ class TreeDetailViewController: UIViewController {
         self.photosViewController.photoCollectionView.reloadData()
     }
     
+    // MARK: MFMailComposeViewController
     
+    func configuredMailComposeViewController() -> MFMailComposeViewController {
+        
+        let mailComposerVC = MFMailComposeViewController()
+        mailComposerVC.mailComposeDelegate = self
+        
+        mailComposerVC.setToRecipients(["treeclimbrcontact@gmail.com"])
+        mailComposerVC.setSubject("TreeClimbr - Inappropriate Content Report")
+        mailComposerVC.setMessageBody("Found inappropriate content! \n\n Username: \n \(tree.treeCreatorName) \n\n TreeName: \n \(tree.treeName) \n\n TreeID: \n \(tree.treeID) \n ", isHTML: false)
+        
+        return mailComposerVC
+    }
+    
+    func showSendMailErrorAlert() {
+        let sendMailErrorAlert = UIAlertView(title: "Could Not Send Email", message: "Your device could not send e-mail.  Please check e-mail configuration and try again.", delegate: self, cancelButtonTitle: "OK")
+        sendMailErrorAlert.show()
+    }
+    
+    // MARK: MFMailComposeViewControllerDelegate Method
+    func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
+        controller.dismiss(animated: true, completion: nil)
+    }
+
 }
